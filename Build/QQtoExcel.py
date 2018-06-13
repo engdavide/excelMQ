@@ -1,54 +1,28 @@
-
-# coding: utf-8
-
-# In[15]:
-
-
 import sys
 import pandas as pd
 import xlwings as xw
 import re
 
-
-
-# In[16]:
-
-
-def QQtoExcel(name):
-    print("QQtoxL start") #debug line
-    
-    mqVersion = 'MultiQuoter2018v0' #This is the filename for current MQ
-    
-    #Format and split input from csv into item list and pan list
-    output = QQtoPD(name)
-    itemsRaw = output[0]
-    pansRaw = output[1]
-    
-    #Import conversion table from file, set index to PANEL 
-    #file='trimConv.csv'
-    #conv=pd.read_csv(file)
-    #conv.set_index('PANEL', inplace=True)
-    #print(conv)
-    
+def getConv(file):
     #Import conversion table from within excel MQ, set index to PANEL, drop extraneous col
-    sh = xw.books(mqVersion).sheets['CONVERSIONS']
+    sh = xw.books(file).sheets['CONVERSIONS']
     conv=pd.DataFrame(sh.range('A1:Y10').value)
     conv.columns = conv.iloc[0]
     conv.set_index('PANEL', inplace=True)
     conv.drop(['PANEL'], inplace=True)
     print(conv)
-    
+    return conv
+
+def prepInput(df, num, pan):    
     #Initialize conversion df: add SKU column, and fill out Typ column with panel type
-    itemsConv = itemsRaw
-    numItems = len(itemsConv['Item'])
-    panType = itemsConv['Item'].values[0]
-    itemsConv['Type'] = panType
-    itemsConv['SKU'] = ""
-    
+    itemsConv = df
+    itemsConv['Type'] = pan
+    itemsConv['SKU'] = "" 
+
     #Loop to turn all Panel Names in the Item column to 'PAN' Also sums up LF of panels and lumps into one column
     numPanCols = 0 
     linFt = 0
-    for i in range(numItems):
+    for i in range(num):
     
         if itemsConv.loc[i, 'Type'] == itemsConv.loc[i, 'Item']:
             itemsConv.loc[i, 'Item'] = 'PAN'
@@ -59,6 +33,24 @@ def QQtoExcel(name):
        
     #Update Qty of panels to total linFt iterated above
     itemsConv.loc[0,'Qty'] = linFt
+    return itemsConv
+
+def QQtoExcel(name):
+    print("QQtoxL start") #debug line
+    
+    mqVersion = 'MultiQuoter2018v0' #This is the filename for current MQ
+    
+    #Format and split input from csv into item list and pan list
+    output = QQtoPD(name)
+    itemsRaw = output[0]
+    pansRaw = output[1]
+
+    #Prep conv and itemsConv
+    numItems = len(itemsRaw['Item'])
+    panType = itemsRaw['Item'].values[0]
+    conv = getConv(mqVersion)
+    itemsConv = prepInput(itemsRaw, numItems, panType)
+    linFt = itemsConv.loc[0,'Qty']
 
     
     #Add screws (round up to 250)
@@ -89,11 +81,6 @@ def QQtoExcel(name):
             sSeam = 1
     else:
         sSeam = 0
-    
-    #print(itemsConv.loc[0,'SKU']) #debug line
-    #print(itemsConv.loc[0,'SKU'])
-    #print("Sseam" + str(sSeam))
-          #debug line
     
     # For sSeam, add Z flashing to match # of HC, RC, EF, SW, and EW
     # For sSeam, add PS to match # of PV, TF
@@ -205,8 +192,9 @@ def QQtoExcel(name):
 
 
 
-# In[63]:
 
+# LEAVE QQ to PD as-is 
+# Will have to rebuild for XML anyway
 
 def QQtoPD(file):
     print("QQtoPD start") #debug line
